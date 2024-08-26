@@ -1,0 +1,3 @@
+web/config/*.json
+web/instance/meter.db
+web/static/uploads/*

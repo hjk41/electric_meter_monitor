@@ -1,0 +1,12 @@
+{
+  "appToken":"AT_xxxxxxxx ",
+  "content":"房间${ROOM}电量过低！余额${BALANCE}",
+  "summary":"电量过低提醒",
+  "contentType":2,
+  "topicIds":[ 
+    32876
+  ],
+  "url":"https://wxpusher.zjiecode.com", 
+  "verifyPay":false, 
+  "verifyPayType":0 
+}

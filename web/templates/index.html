@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电表状态</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    {% include 'nav.html' %}
+    <div class="container">
+        <h1>当前电表状态</h1>
+        
+        {% if last_image %}
+        <h2>上一张上传图片</h2>
+        <div class="image-item">
+            <img src="{{ last_image }}" alt="Last uploaded image">
+            <p>{{ last_image.split('/')[-1] }}</p>
+        </div>
+        {% endif %}
+        
+        {% if current_reading is not none %}
+        <h2>当前电表读数: {{ current_reading }}</h2>
+        {% endif %}
+        
+        {% if current_balance is not none %}
+        <h2>当前余额: {{ current_balance }} 元</h2>
+        {% endif %}
+        
+        {% if last_log %}
+        <h2>上一次操作日志</h2>
+        <p>时间: {{ last_log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        <p>操作类型: {{ last_log.operation_type }}</p>
+        <p>用户ID: {{ last_log.user_id }}</p>
+        <p>详情: {{ last_log.details }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>操作日志</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    {% include 'nav.html' %}
+    <div class="container">
+        <h1>操作日志</h1>
+        <div class="controls">
+            <a href="{{ url_for('meter_management') }}" class="back-link">返回电表管理</a>
+            <a href="{{ url_for('upload_file') }}" class="back-link">返回首页</a>
+            <form action="{{ url_for('clean_logs') }}" method="post" onsubmit="return confirm('确定要清除所有日志吗？此操作不可撤销。');">
+                <button type="submit" class="button">清除所有日志</button>
+            </form>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>操作类型</th>
+                    <th>用户ID</th>
+                    <th>详情</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.timestamp.strftime('%Y-%m-%d %H-%M-%S') }}</td>
+                    <td>{{ log.operation_type }}</td>
+                    <td>{{ log.user_id }}</td>
+                    <td>{{ log.details }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

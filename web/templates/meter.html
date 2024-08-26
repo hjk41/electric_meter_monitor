@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电表管理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    {% include 'nav.html' %}
+    <div class="container">
+        <h1>电表管理</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="meter-info">
+            <h2>当前电表读数: {{ current_reading if current_reading is not none else '暂无数据' }}
+                {% if is_manual_correction %}
+                    <span class="manual-correction-label">(手工校正值)</span>
+                {% endif %}
+            </h2>
+            {% if current_balance is not none %}
+            <h2>当前余额: {{ current_balance }} 元</h2>
+            {% endif %}
+        </div>
+        
+        <form method="post">
+            <div class="form-group">
+                <label for="last_balance">上次充值后余额:</label>
+                <input type="number" step="0.01" id="last_balance" name="last_balance" value="{{ meter_data.last_balance }}" required>
+            </div>
+            <div class="form-group">
+                <label for="last_recharge_reading">上次充值时读数:</label>
+                <input type="number" step="0.01" id="last_recharge_reading" name="last_recharge_reading" value="{{ meter_data.last_recharge_reading }}" required>
+            </div>
+            <div class="form-group">
+                <label for="warn_balance">警戒余额:</label>
+                <input type="number" step="0.01" id="warn_balance" name="warn_balance" value="{{ meter_data.warn_balance }}" required>
+            </div>
+            <button type="submit" name="reset" class="button">更新数据</button>
+            <button type="submit" name="trigger_alarm" class="button warning">触发报警</button>
+        </form>
+
+        <div class="log-link">
+            <a href="{{ url_for('view_logs') }}">查看操作日志</a>
+        </div>
+    </div>
+</body>
+</html>

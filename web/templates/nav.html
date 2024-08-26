@@ -1,0 +1,8 @@
+<nav>
+    <ul>
+        <li><a href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}class="active"{% endif %}>首页</a></li>
+        <li><a href="{{ url_for('upload_file') }}" {% if request.endpoint == 'upload_file' %}class="active"{% endif %}>上传图片</a></li>
+        <li><a href="{{ url_for('meter_management') }}" {% if request.endpoint == 'meter_management' %}class="active"{% endif %}>电表管理</a></li>
+        <li><a href="{{ url_for('view_logs') }}" {% if request.endpoint == 'view_logs' %}class="active"{% endif %}>查看操作日志</a></li>
+    </ul>
+</nav>
