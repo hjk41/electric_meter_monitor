@@ -2,6 +2,7 @@
 #include "esp_camera.h"
 #include "WiFi.h"
 #include "HTTPClient.h"
+#include "base64.h"
 
 #include "config.h"
 
@@ -67,17 +68,9 @@ void loop() {
     return;
   }
 
-  // Initialize Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println("Connected to WiFi");
-
   // Take Picture with Camera
   // use maximum flash light
-  digitalWrite(LAMP_PIN, HIGH);
+  digitalWrite(LAMP_PIN, LOW);
   delay(100);
   camera_fb_t * fb = esp_camera_fb_get();
   if(!fb) {
@@ -86,20 +79,38 @@ void loop() {
   }
   // turn off flash light
   digitalWrite(LAMP_PIN, LOW);
-  // sleep for 1 second
-  delay(1000);
 
+  // Initialize Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
   // Upload picture to server
   if(WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(serverUrl);
-    http.addHeader("Content-Type", "image/jpeg");
+    http.begin(serverUrl); // Specify the URL
 
-    int httpResponseCode = http.POST(fb->buf, fb->len);
-    if(httpResponseCode > 0) {
-      Serial.printf("HTTP Response code: %d\n", httpResponseCode);
+    // Prepare form-data
+    String boundary = "---------------------------14737809831466499882746641449";
+    String body = "--" + boundary + "\r\n";
+    body += "Content-Disposition: form-data; name=\"user_id\"\r\n\r\n";
+    body += "002\r\n"; // User ID
+    body += "--" + boundary + "\r\n";
+    body += "Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n";
+    body += "Content-Type: image/jpeg\r\n\r\n";
+
+    // Send the header
+    http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+
+    // Send the body
+    String base64Image = base64::encode(fb->buf, fb->len);
+    int httpResponseCode = http.POST(body + base64Image + "\r\n--" + boundary + "--\r\n");
+    if (httpResponseCode > 0) {
+        Serial.printf("HTTP Response code: %d\n", httpResponseCode);
     } else {
-      Serial.printf("Error code: %d\n", httpResponseCode);
+        Serial.printf("Error code: %d\n", httpResponseCode);
     }
     http.end();
   } else {
@@ -112,6 +123,11 @@ void loop() {
   esp_camera_fb_return(fb);
   // shutdown wifi
   WiFi.disconnect(true);
+  // uninitialize wifi
+  WiFi.mode(WIFI_OFF);
+
+  // sleep for 1 second
+  delay(1000);
 
   // // wake up every 2 seconds using timer wake up
   // esp_sleep_enable_timer_wakeup(2 * 1000000);
