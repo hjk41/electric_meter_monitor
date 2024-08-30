@@ -96,7 +96,7 @@ def recognize_meter_reading(image_path):
                     'role': 'user',
                     'content': [
                         {'image': image_path},
-                        {'text': '请识别这张图片中的电表读数，注意电表读数是6位整数，只返回数字。'}
+                        {'text': '请识别这张图片中的电表读数，电表读数是6位整数，只返回数字，不要有任何文字和符号。'}
                     ]
                 }
             ]

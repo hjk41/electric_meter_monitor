@@ -105,7 +105,8 @@ void loop() {
     http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
 
     // Send the body
-    String base64Image = base64::encode(fb->buf, fb->len);
+    //String base64Image = base64::encode(fb->buf, fb->len);
+    String base64Image(fb->buf, fb->len);
     int httpResponseCode = http.POST(body + base64Image + "\r\n--" + boundary + "--\r\n");
     if (httpResponseCode > 0) {
         Serial.printf("HTTP Response code: %d\n", httpResponseCode);
