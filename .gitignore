@@ -1,3 +1,4 @@
+cam/config.h
 web/config/*.json
 web/instance/meter.db
 web/static/uploads/*

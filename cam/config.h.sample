@@ -1,0 +1,6 @@
+// Wi-Fi credentials
+const char* ssid = "MyWifi_SSID";
+const char* password = "MyWifi_Password";
+
+// Server URL
+const char* serverUrl = "http://192.168.1.100:5000/upload";
