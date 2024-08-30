@@ -68,6 +68,11 @@ void loop() {
     return;
   }
 
+  // Most OV cameras produces images upside down, we need to flip it
+  sensor_t * s = esp_camera_sensor_get();
+  s->set_vflip(s, 1); // flip it vertically
+  s->set_hmirror(s, 1); // flip it horizontally
+  
   // Take Picture with Camera
   // use maximum flash light
   digitalWrite(LAMP_PIN, LOW);
@@ -78,7 +83,7 @@ void loop() {
     return;
   }
   // turn off flash light
-  digitalWrite(LAMP_PIN, LOW);
+  digitalWrite(LAMP_PIN, LOW);  
 
   // Initialize Wi-Fi
   WiFi.begin(ssid, password);
@@ -127,12 +132,9 @@ void loop() {
   // uninitialize wifi
   WiFi.mode(WIFI_OFF);
 
-  // sleep for 1 second
-  delay(1000);
+  // wake up every 20 seconds using timer wake up
+  esp_sleep_enable_timer_wakeup(20 * 1000000);
 
-  // // wake up every 2 seconds using timer wake up
-  // esp_sleep_enable_timer_wakeup(2 * 1000000);
-
-  // // Turn off the ESP32-CAM
-  // esp_deep_sleep_start();
+  // Turn off the ESP32-CAM
+  esp_deep_sleep_start();
 }
