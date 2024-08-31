@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.exceptions import NotFound
 import dashscope
 from dashscope import MultiModalConversation
+import logging
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -85,6 +86,7 @@ def send_wxpusher_alert():
         else:
             flash(f'发送报警消息失败: {result["msg"]}', 'error')
     else:
+        logging.error(f"Failed to send alert via wxpush: HTTP {response.status_code}")
         flash(f'发送报警消息失败: HTTP {response.status_code}', 'error')
 
 def recognize_meter_reading(image_path):
@@ -96,20 +98,23 @@ def recognize_meter_reading(image_path):
                     'role': 'user',
                     'content': [
                         {'image': image_path},
-                        {'text': '请识别这张图片中的电表读数，电表读数是6位整数，只返回数字，不要有任何文字和符号。'}
+                        {'text': '请识别这张图片中的电表读数，电表读数是6位整数，只返回数字，不要有任何文字和符号。如果你不能识别度数，返回-1。'}
                     ]
                 }
             ]
         )
         if response.status_code == 200:
-            print("dashscope response:", response)
             # Assuming the model returns a numeric string
-            return float(response.output.choices[0].message.content[0]['text'].strip())
+            reading = float(response.output.choices[0].message.content[0]['text'].strip())
+            if reading < 0:
+                logging.warning("Failed to recognize meter reading")
+                return None
+            return reading
         else:
-            print(f"Error: {response.code}, {response.message}")
+            logging.error(f"Error: {response.code}, {response.message}")
             return None
     except Exception as e:
-        print(f"Error recognizing meter reading: {str(e)}")
+        logging.error(f"Error recognizing meter reading: {str(e)}")
         return None
 
 def calculate_current_balance(meter_data, current_reading):
@@ -121,6 +126,7 @@ def calculate_current_balance(meter_data, current_reading):
 def block_sensitive_dirs():
     if request.path.startswith(('/config/', '/instance/')):
         raise NotFound()
+    logging.info(f"Request: {request.path}")
 
 @app.route('/')
 def index():
@@ -186,9 +192,11 @@ def upload_file():
                     db.session.delete(old_image)
                 db.session.commit()
             except Exception as e:
+                logging.error(f"Error uploading file: {str(e)}")
                 flash(f'文件上传失败: {str(e)}', 'error')
             return redirect(url_for('upload_file'))
         else:
+            logging.warning("No file selected for upload")
             flash('没有选择文件', 'warning')
 
     # 获取最新的电表读数
@@ -287,6 +295,7 @@ def meter_management():
         elif 'trigger_alarm' in request.form:
             send_wxpusher_alert()
             log_operation('alarm_triggered', 'admin', f'Current balance: {meter_data.last_balance}')
+            logging.warning("Alarm triggered")
             flash('报警已触发！当前余额低于警戒值', 'warning')
 
     return render_template('meter.html', meter_data=meter_data, current_reading=current_reading, is_manual_correction=is_manual_correction, current_balance=current_balance)
@@ -308,7 +317,7 @@ def clean_logs():
     except Exception as e:
         db.session.rollback()
         flash(f'清除日志失败: {str(e)}', 'error')
-        app.logger.error(f'Log cleaning error: {str(e)}')
+        logging.error(f'Log cleaning error: {str(e)}')
 
     return redirect(url_for('view_logs'))
 
