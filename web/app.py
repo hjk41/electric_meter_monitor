@@ -82,8 +82,10 @@ def send_wxpusher_alert():
     if response.status_code == 200:
         result = response.json()
         if result['success']:
+            logging.info('报警消息已成功发送')
             flash('报警消息已成功发送', 'success')
         else:
+            logging.error(f'发送报警消息失败: {result["msg"]}')
             flash(f'发送报警消息失败: {result["msg"]}', 'error')
     else:
         logging.error(f"Failed to send alert via wxpush: HTTP {response.status_code}")
@@ -191,6 +193,12 @@ def upload_file():
                     # 从数据库中删除记录
                     db.session.delete(old_image)
                 db.session.commit()
+
+                # 检查是否需要发送报警
+                meter_data = MeterData.query.first()
+                current_balance = calculate_current_balance(meter_data, current_reading) if meter_data else None
+                if current_balance and current_balance < meter_data.warn_balance:
+                    send_wxpusher_alert()
             except Exception as e:
                 logging.error(f"Error uploading file: {str(e)}")
                 flash(f'文件上传失败: {str(e)}', 'error')
