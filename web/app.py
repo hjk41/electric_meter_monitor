@@ -16,6 +16,7 @@ app.config['SECRET_KEY'] = 'your_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///meter.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
+MAX_BALANCE = 9999
 
 # Ensure the upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -72,12 +73,24 @@ def log_operation(operation_type, user_id, details):
     db.session.add(log)
     db.session.commit()
 
+def get_current_balance():
+    meter_data = MeterData.query.first()
+    if not meter_data:
+        return MAX_BALANCE
+    latest_reading = MeterReading.query.order_by(MeterReading.timestamp.desc()).first()
+    if not latest_reading:
+        return MAX_BALANCE
+    return meter_data.last_recharge_reading + meter_data.last_balance - latest_reading.reading
+
+def get_warn_balance():
+    meter_data = MeterData.query.first()
+    return meter_data.warn_balance
+
 def send_wxpusher_alert():
     url = "https://wxpusher.zjiecode.com/api/send/message"
     headers = {"Content-Type": "application/json"}
-    meter_data = MeterData.query.first()
     wxpush_config['content'] = wxpush_config['content'].replace('${ROOM}', '2502')
-    wxpush_config['content'] = wxpush_config['content'].replace('${BALANCE}', str(meter_data.last_balance))
+    wxpush_config['content'] = wxpush_config['content'].replace('${BALANCE}', str(get_current_balance()))
     response = requests.post(url, json=wxpush_config, headers=headers)
     if response.status_code == 200:
         result = response.json()
@@ -90,6 +103,11 @@ def send_wxpusher_alert():
     else:
         logging.error(f"Failed to send alert via wxpush: HTTP {response.status_code}")
         flash(f'发送报警消息失败: HTTP {response.status_code}', 'error')
+
+def check_balance_and_send_alert():
+    current_balance = get_current_balance()
+    if current_balance < get_warn_balance():
+        send_wxpusher_alert()
 
 def recognize_meter_reading(image_path):
     try:
@@ -119,11 +137,6 @@ def recognize_meter_reading(image_path):
         logging.error(f"Error recognizing meter reading: {str(e)}")
         return None
 
-def calculate_current_balance(meter_data, current_reading):
-    if current_reading is None:
-        return None
-    return meter_data.last_recharge_reading + meter_data.last_balance - current_reading
-
 @app.before_request
 def block_sensitive_dirs():
     if request.path.startswith(('/config/', '/instance/')):
@@ -137,8 +150,7 @@ def index():
     current_reading = latest_reading.reading if latest_reading else None
 
     # Get the current balance (assuming you have a Balance model)
-    meter_data = MeterData.query.first()
-    current_balance = calculate_current_balance(meter_data, current_reading) if meter_data else None
+    current_balance = get_current_balance()
 
     # Get the last uploaded image
     last_image = Image.query.order_by(Image.upload_time.desc()).first()
@@ -176,6 +188,7 @@ def upload_file():
                     flash(f'文件上传成功，识别的电表读数为: {meter_reading}', 'success')
                 else:
                     flash('文件上传成功，但无法识别电表读数', 'warning')
+                    return
 
                 # 保存图片记录
                 new_image = Image(filename=filename, upload_time=ts)
@@ -195,10 +208,7 @@ def upload_file():
                 db.session.commit()
 
                 # 检查是否需要发送报警
-                meter_data = MeterData.query.first()
-                current_balance = calculate_current_balance(meter_data, current_reading) if meter_data else None
-                if current_balance and current_balance < meter_data.warn_balance:
-                    send_wxpusher_alert()
+                check_balance_and_send_alert()
             except Exception as e:
                 logging.error(f"Error uploading file: {str(e)}")
                 flash(f'文件上传失败: {str(e)}', 'error')
@@ -252,6 +262,8 @@ def manual_correction():
                         return redirect(url_for('upload_file'))
                     log_operation('manual_correction', 'admin', f'Manual correction: {reading}, Image: {latest_image}')
                     flash('电表读数已手动校正', 'success')
+                    # 检查是否需要发送报警
+                    check_balance_and_send_alert()
                 except ValueError:
                     flash('无效的读数值', 'error')
             else:
@@ -273,7 +285,7 @@ def meter_management():
     latest_reading = MeterReading.query.order_by(MeterReading.timestamp.desc()).first()
     current_reading = latest_reading.reading if latest_reading else None
     is_manual_correction = latest_reading.is_manual_correction if latest_reading else False
-    current_balance = calculate_current_balance(meter_data, current_reading)
+    current_balance = get_current_balance()
 
     if request.method == 'POST':
         if 'reset' in request.form:
