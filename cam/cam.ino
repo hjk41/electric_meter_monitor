@@ -3,6 +3,7 @@
 #include "WiFi.h"
 #include "HTTPClient.h"
 #include "base64.h"
+#include "driver/rtc_io.h"
 
 #include "config.h"
 
@@ -31,10 +32,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Starting ESP32-CAM...");
 
-  pinMode(LAMP_PIN, OUTPUT);
-}
+  rtc_gpio_hold_dis(GPIO_NUM_4);
 
-void loop() {
   // Configure camera settings
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -75,7 +74,8 @@ void loop() {
   
   // Take Picture with Camera
   // use maximum flash light
-  digitalWrite(LAMP_PIN, LOW);
+  pinMode(LAMP_PIN, OUTPUT);
+  digitalWrite(LAMP_PIN, HIGH);
   delay(100);
   camera_fb_t * fb = esp_camera_fb_get();
   if(!fb) {
@@ -83,7 +83,7 @@ void loop() {
     return;
   }
   // turn off flash light
-  digitalWrite(LAMP_PIN, LOW);  
+  digitalWrite(LAMP_PIN, LOW);
 
   // Initialize Wi-Fi
   WiFi.begin(ssid, password);
@@ -124,17 +124,21 @@ void loop() {
   }
 
   // uninitialize camera
-  esp_camera_deinit();
+  //esp_camera_deinit();
   // Return the frame buffer back to the driver for reuse
   esp_camera_fb_return(fb);
   // shutdown wifi
   WiFi.disconnect(true);
   // uninitialize wifi
-  WiFi.mode(WIFI_OFF);
+  //WiFi.mode(WIFI_OFF);
 
+  rtc_gpio_isolate(GPIO_NUM_4);
   // wake up every 20 seconds using timer wake up
-  esp_sleep_enable_timer_wakeup(20 * 1000000);
+  esp_sleep_enable_timer_wakeup(10 * 1000000);
 
   // Turn off the ESP32-CAM
   esp_deep_sleep_start();
+}
+
+void loop() {
 }
