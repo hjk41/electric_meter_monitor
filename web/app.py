@@ -37,6 +37,23 @@ with open('config/wxpush.json', 'rb') as f:
 with open('config/wxpush.json', 'r', encoding=encoding) as f:
     wxpush_config = json.load(f)
 
+# start a timed task to check if any picture was uploaded in the last 2 days
+# if not, send a warning message
+# this task will run every 24 hours
+# you can change the time interval by changing the interval parameter
+def check_last_upload():
+    last_upload = Image.query.order_by(Image.upload_time.desc()).first()
+    if last_upload:
+        if (datetime.now() - last_upload.upload_time).days > 2:
+            send_no_upload_alert()
+    else:
+        send_no_upload_alert()
+# setup the timed task in flask using apscheduler
+from apscheduler.schedulers.background import BackgroundScheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(check_last_upload, 'interval', hours=24)
+scheduler.start()
+
 db = SQLAlchemy(app)
 
 class MeterData(db.Model):
@@ -89,9 +106,10 @@ def get_warn_balance():
 def send_wxpusher_alert():
     url = "https://wxpusher.zjiecode.com/api/send/message"
     headers = {"Content-Type": "application/json"}
-    wxpush_config['content'] = wxpush_config['content'].replace('${ROOM}', '2502')
-    wxpush_config['content'] = wxpush_config['content'].replace('${BALANCE}', str(get_current_balance()))
-    response = requests.post(url, json=wxpush_config, headers=headers)
+    json = wxpush_config
+    json['content'] = json['content'].replace('${ROOM}', '2502')
+    json['content'] = json['content'].replace('${BALANCE}', str(get_current_balance()))
+    response = requests.post(url, json=json, headers=headers)
     if response.status_code == 200:
         result = response.json()
         if result['success']:
@@ -103,6 +121,22 @@ def send_wxpusher_alert():
     else:
         logging.error(f"Failed to send alert via wxpush: HTTP {response.status_code}")
         flash(f'发送报警消息失败: HTTP {response.status_code}', 'error')
+
+def send_no_upload_alert():
+    url = "https://wxpusher.zjiecode.com/api/send/message"
+    headers = {"Content-Type": "application/json"}
+    json = wxpush_config
+    json['content'] = '{0}电表图片已经有{1}未更新'%('2502', '2天')
+    json['summary'] = '未上传图片警告'
+    response = requests.post(url, json=json, headers=headers)
+    if response.status_code == 200:
+        result = response.json()
+        if result['success']:
+            logging.info('未上传图片警告消息已成功发送')
+        else:
+            logging.error(f'发送未上传图片警告消息失败: {result["msg"]}')
+    else:
+        logging.error(f"Failed to send no-upload alert via wxpush: HTTP {response.status_code}")
 
 def check_balance_and_send_alert():
     current_balance = get_current_balance()
