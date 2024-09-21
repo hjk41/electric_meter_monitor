@@ -27,13 +27,17 @@
 #define PCLK_GPIO_NUM     22
 #define LAMP_PIN           4 // LED FloodLamp.
 
-void setup() {
-  // Initialize Serial Monitor
-  Serial.begin(115200);
-  Serial.println("Starting ESP32-CAM...");
+const long long sleep_s = 24*3600;
 
-  rtc_gpio_hold_dis(GPIO_NUM_4);
+void forceSleep(void*) {
+  Serial.println("Forcing sleep...");
+  digitalWrite(33, LOW);
+  rtc_gpio_isolate(GPIO_NUM_4);
+  esp_sleep_enable_timer_wakeup(sleep_s * 1000000);
+  esp_deep_sleep_start();
+}
 
+void InitCamera() {
   // Configure camera settings
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -59,6 +63,7 @@ void setup() {
   config.frame_size = FRAMESIZE_SVGA;
   config.jpeg_quality = 12;
   config.fb_count = 1;
+  //config.fb_location = CAMERA_FB_IN_DRAM;
 
   // Camera init
   esp_err_t err = esp_camera_init(&config);
@@ -71,27 +76,65 @@ void setup() {
   sensor_t * s = esp_camera_sensor_get();
   s->set_vflip(s, 1); // flip it vertically
   s->set_hmirror(s, 1); // flip it horizontally
-  
-  // Take Picture with Camera
-  // use maximum flash light
-  pinMode(LAMP_PIN, OUTPUT);
-  digitalWrite(LAMP_PIN, HIGH);
-  delay(100);
-  camera_fb_t * fb = esp_camera_fb_get();
-  if(!fb) {
-    Serial.println("Camera capture failed");
-    return;
-  }
-  // turn off flash light
-  digitalWrite(LAMP_PIN, LOW);
+}
 
-  // Initialize Wi-Fi
+void StopCamera() {
+  esp_camera_deinit();
+}
+
+void InitWiFi() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
+}
+
+void StopWiFi() {
+  WiFi.disconnect(true);
+}
+
+String TakePicture() {
+  rtc_gpio_hold_dis(GPIO_NUM_4);
+  
+  // Most OV cameras produces images upside down, we need to flip it
+  sensor_t * s = esp_camera_sensor_get();
+  s->set_vflip(s, 1); // flip it vertically
+  s->set_hmirror(s, 1); // flip it horizontally
+  
+  // Take Picture with Camera
+  // use maximum flash light
+  pinMode(LAMP_PIN, OUTPUT);
+  digitalWrite(LAMP_PIN, HIGH);
+  delay(10);
+  camera_fb_t * fb = esp_camera_fb_get();
+  if(!fb) {
+    Serial.println("Camera capture failed");
+    return String();
+  }
+  // turn off flash light
+  digitalWrite(LAMP_PIN, LOW);
+
+  String pic(fb->buf, fb->len);
+  // Return the frame buffer back to the driver for reuse
+  esp_camera_fb_return(fb);
+  rtc_gpio_isolate(GPIO_NUM_4);
+  return pic;
+}
+
+esp_timer_handle_t CreateForceSleepTimer() {
+  esp_timer_handle_t force_sleep_timer;
+  esp_timer_create_args_t fs_timer_args = {
+    .callback = &forceSleep,
+    .name = "force_sleep"
+  };
+  esp_timer_create(&fs_timer_args, &force_sleep_timer);
+  esp_timer_start_once(force_sleep_timer, 20 * 1000000);  // put to sleep if we are still running after 20 seconds
+  return force_sleep_timer;
+}
+
+void SendPicture(const String& pic) {
   // Upload picture to server
   if(WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -110,9 +153,7 @@ void setup() {
     http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
 
     // Send the body
-    //String base64Image = base64::encode(fb->buf, fb->len);
-    String base64Image(fb->buf, fb->len);
-    int httpResponseCode = http.POST(body + base64Image + "\r\n--" + boundary + "--\r\n");
+    int httpResponseCode = http.POST(body + pic + "\r\n--" + boundary + "--\r\n");
     if (httpResponseCode > 0) {
         Serial.printf("HTTP Response code: %d\n", httpResponseCode);
     } else {
@@ -122,21 +163,34 @@ void setup() {
   } else {
     Serial.println("WiFi Disconnected");
   }
+}
 
-  // uninitialize camera
-  //esp_camera_deinit();
-  // Return the frame buffer back to the driver for reuse
-  esp_camera_fb_return(fb);
-  // shutdown wifi
-  WiFi.disconnect(true);
-  // uninitialize wifi
-  //WiFi.mode(WIFI_OFF);
+void setup() {
+  // Initialize Serial Monitor
+  Serial.begin(115200);
+  Serial.println("Starting ESP32-CAM...");
 
-  rtc_gpio_isolate(GPIO_NUM_4);
-  // wake up every 20 seconds using timer wake up
-  esp_sleep_enable_timer_wakeup(10 * 1000000);
+  // set timer to force sleep
+  esp_timer_handle_t force_sleep_timer = CreateForceSleepTimer();
 
-  // Turn off the ESP32-CAM
+  // Initialize Camera
+  InitCamera();
+  // Take Picture
+  String pic = TakePicture();
+  // Initialize WiFi
+  InitWiFi();
+  // Send Picture
+  SendPicture(pic);
+  // Stop WiFi
+  StopWiFi();
+  // Stop Camera
+  StopCamera();
+
+  // disable force sleep timer
+  esp_timer_stop(force_sleep_timer);
+
+  // hibernate for 1 day
+  esp_sleep_enable_timer_wakeup(sleep_s * 1000000);
   esp_deep_sleep_start();
 }
 
