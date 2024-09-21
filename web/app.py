@@ -146,16 +146,20 @@ def check_balance_and_send_alert():
 def recognize_meter_reading(image_path):
     try:
         response = MultiModalConversation.call(
-            model='qwen-vl-plus',
+            model='qwen-vl-max',
             messages=[
                 {
                     'role': 'user',
                     'content': [
                         {'image': image_path},
-                        {'text': '''*目标* 识别电表的度数\n
-                                    *输出格式* 返回数字，不要带其他文字或符号。\n
-                                    *提示* 电表度数是6位数字，最后一位可能显示不清楚，如果不能识别最后一位，就以0填充，注意最后输出的一定是6位数字。\n
-                                    *特殊判断* 如果图片不是电表或者无法识别，返回-1'''}
+                        {'text': '''*目标*: 识别电表的度数。\n
+                                    *提示*:\n 
+                                        1.电表度数是6位正整数。\n
+                                        2.读数的最后一位可能显示不完整，如果不能识别最后一位，就以0代替。\n
+                                        3.如果图片不够清晰，可以适当猜测。\n
+                                        4.最后输出*必须*是6位正整数。\n
+                                    *特殊判断*: 如果图片不是电表或者无法识别，返回-1\n
+                                    *输出格式*: 返回数字，不要带其他文字或符号。示例：058070\n'''}
                     ]
                 }
             ]
@@ -163,6 +167,7 @@ def recognize_meter_reading(image_path):
         if response.status_code == 200:
             # Assuming the model returns a numeric string
             reading = float(response.output.choices[0].message.content[0]['text'].strip())
+            print(f"Recognized meter reading: {reading}")
             if reading < 0:
                 logging.warning("Failed to recognize meter reading")
                 return None

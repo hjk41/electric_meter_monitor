@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Set up logging to a file
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
-    logging.FileHandler('c:\\mine\\electric_log.txt'),
+    logging.FileHandler('log.txt'),
     logging.StreamHandler(sys.stdout)
 ])
 
