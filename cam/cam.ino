@@ -2,10 +2,13 @@
 #include "esp_camera.h"
 #include "WiFi.h"
 #include "HTTPClient.h"
-#include "base64.h"
 #include "driver/rtc_io.h"
+#include <esp_wifi.h>
+#include <esp_bt.h>
+#include <esp_bt_main.h>
 
 #include "config.h"
+#include "Preferences.h"
 
 // Camera pin definitions
 #define PWDN_GPIO_NUM     32
@@ -27,13 +30,19 @@
 #define PCLK_GPIO_NUM     22
 #define LAMP_PIN           4 // LED FloodLamp.
 
-const long long sleep_s = 24*3600;
+const long long sleep_s = 20;
 
-void forceSleep(void*) {
-  Serial.println("Forcing sleep...");
+void gotoSleep(void*) {
+  Serial.println("gotoSleep...");
   digitalWrite(33, LOW);
-  rtc_gpio_isolate(GPIO_NUM_4);
+
+  esp_wifi_stop();
+  esp_bt_controller_disable();
+  esp_bluedroid_disable();
+
+  Serial.println("setting wakeup source");
   esp_sleep_enable_timer_wakeup(sleep_s * 1000000);
+  Serial.println("calling deep_sleep_start");
   esp_deep_sleep_start();
 }
 
@@ -123,10 +132,10 @@ String TakePicture() {
   return pic;
 }
 
-esp_timer_handle_t CreateForceSleepTimer() {
+esp_timer_handle_t CreategotoSleepTimer() {
   esp_timer_handle_t force_sleep_timer;
   esp_timer_create_args_t fs_timer_args = {
-    .callback = &forceSleep,
+    .callback = &gotoSleep,
     .name = "force_sleep"
   };
   esp_timer_create(&fs_timer_args, &force_sleep_timer);
@@ -138,7 +147,8 @@ void SendPicture(const String& pic) {
   // Upload picture to server
   if(WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(serverUrl); // Specify the URL
+    if(!http.begin(serverUrl)) return;
+    http.setTimeout(5000);
 
     // Prepare form-data
     String boundary = "---------------------------14737809831466499882746641449";
@@ -165,13 +175,29 @@ void SendPicture(const String& pic) {
   }
 }
 
+int GetAndIncBootCount() {
+  Preferences preferences;
+  preferences.begin("cam", false);
+  int bootCount = preferences.getUInt("bootCount", 0);
+  int ret = bootCount;
+  bootCount = (bootCount + 1) % 24;
+  preferences.putUInt("bootCount", bootCount);
+  preferences.end();
+  return ret;
+}
+
 void setup() {
   // Initialize Serial Monitor
   Serial.begin(115200);
   Serial.println("Starting ESP32-CAM...");
 
-  // set timer to force sleep
-  esp_timer_handle_t force_sleep_timer = CreateForceSleepTimer();
+  // check reboot times
+  int bootCount = GetAndIncBootCount();
+  Serial.printf("Boot count: %d\n", bootCount);
+  if (bootCount != 0) {
+    Serial.println("Not reaching 24 times, going to sleep...");
+    gotoSleep(nullptr);
+  }
 
   // Initialize Camera
   InitCamera();
@@ -186,12 +212,9 @@ void setup() {
   // Stop Camera
   StopCamera();
 
-  // disable force sleep timer
-  esp_timer_stop(force_sleep_timer);
-
   // hibernate for 1 day
-  esp_sleep_enable_timer_wakeup(sleep_s * 1000000);
-  esp_deep_sleep_start();
+  Serial.println("Going to sleep...");
+  gotoSleep(nullptr); 
 }
 
 void loop() {
